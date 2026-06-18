@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>見かけの傾斜の作図</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #eee; font-family: sans-serif; touch-action: none; overscroll-behavior: none; }
+        
+        #ui-panel {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(15, 15, 15, 0.9); padding: 15px 25px;
+            border-radius: 12px; color: #fff; box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            z-index: 100; width: 98%; max-width: 1000px; 
+            display: flex; flex-direction: column; gap: 15px;
+            border: 1px solid #333;
+        }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .panel-header h3 { margin: 0; font-size: 18px; color: #fff; }
+        #status { font-size: 12px; color: #00ffcc; font-weight: normal; transition: 0.3s; }
+        
+        .toggles { display: flex; gap: 15px; flex-wrap: wrap; align-items: center; }
+        .toggles label { font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: bold; }
+        .toggles input[type="checkbox"] { cursor: pointer; accent-color: #00ffcc; }
+        
+        .controls-row { display: flex; flex-direction: column; gap: 10px; }
+
+        .btn-container { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .action-btn { flex: 1; min-width: 135px; padding: 10px 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; font-size: 13px; white-space: nowrap; text-align: center; }
+        .action-btn:hover { background: #555; border-color: #888; }
+        .action-btn.active { background: #00ffcc; color: #000; border-color: #00ffcc; }
+
+        #view-fault-btn { background: #603030; border-color: #884444; transition: 0.3s; }
+        #view-fault-btn:hover { background: #804040; border-color: #aa5555; }
+        #view-fault-btn.active { background: #ff5555; color: #fff; border-color: #ff5555; }
+
+        #view-true-btn { background: #205020; border-color: #448844; transition: 0.3s; }
+        #view-true-btn:hover { background: #307030; border-color: #55aa55; }
+        #view-true-btn.active { background: #55ff55; color: #000; border-color: #55ff55; }
+
+        #compass-container {
+            position: absolute; top: 20px; right: 20px;
+            width: 80px; height: 80px; background: rgba(255, 255, 255, 0.8);
+            border: 2px solid #ccc; border-radius: 50%; z-index: 100;
+            pointer-events: none; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #compass-disc { position: relative; width: 100%; height: 100%; border-radius: 50%; }
+        .compass-label { position: absolute; font-weight: bold; font-size: 12px; color: #666; }
+        .compass-label.n { top: 4px; left: 50%; transform: translateX(-50%); color: #ff4444; font-size: 14px; }
+        .compass-label.s { bottom: 4px; left: 50%; transform: translateX(-50%); }
+        .compass-label.e { right: 6px; top: 50%; transform: translateY(-50%); }
+        .compass-label.w { left: 6px; top: 50%; transform: translateY(-50%); }
+        
+        #compass-arrow { 
+            position: absolute; 
+            width: 8px; 
+            height: 46px; 
+            display: flex; 
+            flex-direction: column; 
+            pointer-events: none; 
+        }
+        #compass-arrow::before {
+            content: "";
+            width: 0; height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 23px solid #ff3333;
+        }
+        #compass-arrow::after {
+            content: "";
+            width: 0; height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 23px solid #333333;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-panel">
+        <div class="panel-header">
+            <h3>見かけの傾斜の作図 <span id="status">GLB読込中...</span></h3>
+            <div class="toggles">
+                <label><input type="checkbox" id="toggle-b2" checked> B：青層（北側）</label>
+                <label><input type="checkbox" id="toggle-g" checked> G：緑色層</label>
+                <label><input type="checkbox" id="toggle-b1" checked> B：青層（南側）</label>
+                <label><input type="checkbox" id="toggle-w" checked> W：白色層</label>
+            </div>
+        </div>
+        
+        <div class="controls-row">
+            <div class="btn-container">
+                <button id="toggle-left-side" class="action-btn active">断層の西側 表示</button>
+                <button id="toggle-right-side" class="action-btn active">断層の東側 表示</button>
+                <button id="toggle-image-btn" class="action-btn active">🗺️ 角度の説明 表示</button>
+            </div>
+            <div class="btn-container">
+                <button id="view-top-btn" class="action-btn view-btn">真上から見る</button>
+                <button id="view-north-btn" class="action-btn view-btn">北側から見る</button>
+                <button id="view-south-btn" class="action-btn view-btn">南側から見る</button>
+                <button id="view-east-btn" class="action-btn view-btn">東側から見る</button>
+                <button id="view-west-btn" class="action-btn view-btn">西側から見る</button>
+                <button id="view-fault-btn" class="action-btn view-btn" style="display: none;">断層面を西側から見る</button>
+                <button id="view-true-btn" class="action-btn view-btn">真の傾斜角を表示</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="compass-container">
+        <div id="compass-disc">
+            <div class="compass-label n">N</div>
+            <div class="compass-label e">E</div>
+            <div class="compass-label s">S</div>
+            <div class="compass-label w">W</div>
+        </div>
+        <div id="compass-arrow"></div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        const scene = new THREE.Scene();
+        
+        const createGradientBackground = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+            gradient.addColorStop(0, '#a1d9ff'); 
+            gradient.addColorStop(0.5, '#ffffff'); 
+            gradient.addColorStop(1, '#a1f29c'); 
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 256, 256);
+            return new THREE.CanvasTexture(canvas);
+        };
+        scene.background = createGradientBackground();
+        scene.fog = new THREE.Fog(0xeeeeee, 2000, 100000); 
+
+        const aspect = window.innerWidth / window.innerHeight;
+        const perspCamera = new THREE.PerspectiveCamera(45, aspect, 1, 10000);
+        let orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 5000);
+        let activeCamera = perspCamera; 
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(activeCamera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.zoomSpeed = 3.0; 
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        scene.add(dirLight);
+
+        let maxDimGlobal = 100;
+        let centerGlobal = new THREE.Vector3(0,0,0);
+        let faultCenter = new THREE.Vector3(0,0,0); 
+
+        const loader = new GLTFLoader();
+        const models = {}; 
+        let topImagePlane = null; 
+        const sideImages = []; 
+
+        let trueModel = null;
+        let trueGazouModel = null;
+        let skeletonMesh = null; 
+
+        let leftSideVisible = true;
+        let rightSideVisible = true;
+        let imageVisible = true; 
+        let isTrueMode = false; 
+
+        function updateFaultBtnState() {
+            if (isTrueMode) return; 
+
+            const btn = document.getElementById('view-fault-btn');
+            if (!leftSideVisible && rightSideVisible) {
+                btn.innerText = '断層面を西側から見る';
+                btn.style.display = ''; 
+            } else if (leftSideVisible && !rightSideVisible) {
+                btn.innerText = '断層面を東側から見る';
+                btn.style.display = ''; 
+            } else {
+                btn.style.display = 'none'; 
+            }
+        }
+
+        function updateVisibility() {
+            if (isTrueMode) {
+                Object.values(models).forEach(m => m.visible = false);
+                sideImages.forEach(mesh => mesh.visible = false);
+                if (skeletonMesh) skeletonMesh.visible = false;
+                
+                if (trueModel) trueModel.visible = true;
+                if (trueGazouModel) trueGazouModel.visible = true;
+                if (topImagePlane) topImagePlane.visible = true; 
+
+                document.getElementById('view-fault-btn').style.display = 'none';
+            } else {
+                const b1 = document.getElementById('toggle-b1').checked;
+                const b2 = document.getElementById('toggle-b2').checked;
+                const g = document.getElementById('toggle-g').checked;
+                const w = document.getElementById('toggle-w').checked;
+
+                if (models['Left_B1']) models['Left_B1'].visible = b1 && leftSideVisible;
+                if (models['Right_B1']) models['Right_B1'].visible = b1 && rightSideVisible;
+                if (models['Left_B2']) models['Left_B2'].visible = b2 && leftSideVisible;
+                if (models['Right_B2']) models['Right_B2'].visible = b2 && rightSideVisible;
+                if (models['Left_G']) models['Left_G'].visible = g && leftSideVisible;
+                if (models['Right_G']) models['Right_G'].visible = g && rightSideVisible;
+                if (models['Left_W']) models['Left_W'].visible = w && leftSideVisible;
+                if (models['Right_W']) models['Right_W'].visible = w && rightSideVisible;
+
+                if (trueModel) trueModel.visible = false;
+                if (trueGazouModel) trueGazouModel.visible = false;
+                if (skeletonMesh) skeletonMesh.visible = true;
+                
+                sideImages.forEach(mesh => mesh.visible = imageVisible);
+                if (topImagePlane) topImagePlane.visible = imageVisible;
+
+                updateFaultBtnState();
+            }
+        }
+
+        function createTextSprite(text, color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = color || "#000000"; 
+            ctx.font = "bold 48px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(text, 64, 32);
+            const texture = new THREE.CanvasTexture(canvas);
+            return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+        }
+
+        const loadModel = (name, url, depthIndex) => {
+            return new Promise((resolve, reject) => {
+                loader.load(url, (gltf) => {
+                    const model = gltf.scene;
+                    const originalMeshes = [];
+                    model.traverse((child) => { if (child.isMesh) originalMeshes.push(child); });
+
+                    originalMeshes.forEach((child) => {
+                        child.frustumCulled = false; 
+                        let originalColor = child.material.color ? child.material.color.clone() : new THREE.Color(0xffffff);
+
+                        child.material = new THREE.MeshPhongMaterial({
+                            color: originalColor, 
+                            map: child.material.map, 
+                            specular: 0x000000, shininess: 0,
+                            side: THREE.FrontSide
+                        });
+
+                        const edgesGeo = new THREE.EdgesGeometry(child.geometry, 30); 
+                        const edgesMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 1 });
+                        const outlineMesh = new THREE.LineSegments(edgesGeo, edgesMat);
+                        child.add(outlineMesh);
+                        
+                        const backColor = originalColor.clone().multiplyScalar(0.85);
+                        const backMat = new THREE.MeshBasicMaterial({
+                            color: backColor, 
+                            side: THREE.BackSide, 
+                            polygonOffset: true,
+                            polygonOffsetFactor: 1,
+                            polygonOffsetUnits: depthIndex
+                        });
+
+                        const backMesh = new THREE.Mesh(child.geometry, backMat);
+                        backMesh.frustumCulled = false;
+                        child.add(backMesh);
+                    });
+
+                    model.scale.set(10, 10, 10);
+                    scene.add(model);
+                    
+                    if (name !== 'TrueModel') {
+                        models[name] = model;
+                    } else {
+                        trueModel = model;
+                        trueModel.visible = false;
+                    }
+                    resolve();
+                }, undefined, reject);
+            });
+        };
+
+        const loadGazouModel = (url, isTrueGazou = false) => {
+            return new Promise((resolve, reject) => {
+                const buster = '?v=' + Date.now();
+                loader.load(url + buster, (gltf) => {
+                    const model = gltf.scene;
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.material.transparent = true;
+                            child.material.blending = THREE.MultiplyBlending;
+                            child.material.depthWrite = false; 
+                            child.material.side = THREE.DoubleSide; 
+                        }
+                    });
+                    model.scale.set(10, 10, 10);
+                    
+                    // 回転のハックは完全に削除しました。Blenderの情報を100%信用します。
+
+                    model.visible = false;
+                    scene.add(model);
+                    
+                    if (isTrueGazou) {
+                        trueGazouModel = model;
+                    } else {
+                        sideImages.push(model);
+                    }
+                    resolve();
+                }, undefined, reject);
+            });
+        };
+
+        const loadKijunn = (url) => {
+            return new Promise((resolve, reject) => {
+                loader.load(url, (gltf) => {
+                    const model = gltf.scene;
+                    model.scale.set(10, 10, 10);
+                    model.updateMatrixWorld(true);
+                    const box = new THREE.Box3().setFromObject(model);
+                    box.getCenter(faultCenter); 
+                    model.visible = false; 
+                    scene.add(model);
+                    resolve();
+                }, undefined, reject);
+            });
+        };
+
+        Promise.all([
+            loadModel('Left_B1', 'Left_B1.glb', 1),
+            loadModel('Left_B2', 'Left_B2.glb', 2),
+            loadModel('Left_G', 'Left_G.glb', 3),
+            loadModel('Left_W', 'Left_W.glb', 4),
+            loadModel('Right_B1', 'Right_B1.glb', 5),
+            loadModel('Right_B2', 'Right_B2.glb', 6),
+            loadModel('Right_G', 'Right_G.glb', 7),
+            loadModel('Right_W', 'Right_W.glb', 8),
+            loadModel('TrueModel', 'ture.glb', 9), 
+            loadKijunn('kijunn.glb'),
+            loadGazouModel('southgazou.glb'),
+            loadGazouModel('eastgazou.glb'),
+            loadGazouModel('westgazou.glb'),
+            loadGazouModel('turegazou.glb', true)
+        ]).then(() => {
+            const box = new THREE.Box3();
+            Object.values(models).forEach(model => box.expandByObject(model));
+
+            centerGlobal.copy(box.getCenter(new THREE.Vector3()));
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            maxDimGlobal = maxDim;
+
+            const skeletonGeo = new THREE.BoxGeometry(size.x, size.y, size.z);
+            const skeletonEdges = new THREE.EdgesGeometry(skeletonGeo);
+            const skeletonMat = new THREE.LineBasicMaterial({ color: 0xff0000 }); 
+            skeletonMesh = new THREE.LineSegments(skeletonEdges, skeletonMat);
+            skeletonMesh.position.copy(centerGlobal);
+            scene.add(skeletonMesh);
+
+            const gridWidth = maxDim * 1.5;
+            const gridHelper = new THREE.GridHelper(gridWidth, 20, 0x888888, 0xcccccc);
+            gridHelper.position.set(centerGlobal.x, box.min.y, centerGlobal.z);
+            scene.add(gridHelper);
+
+            const distStr = gridWidth / 2 + maxDim * 0.05; 
+            const labelY = box.min.y;
+
+            const labelN = createTextSprite("北", "#ff4444"); 
+            labelN.position.set(centerGlobal.x, labelY, centerGlobal.z - distStr);
+            labelN.scale.set(maxDim*0.15, maxDim*0.075, 1);
+            scene.add(labelN);
+
+            const labelS = createTextSprite("南", "#000000");
+            labelS.position.set(centerGlobal.x, labelY, centerGlobal.z + distStr);
+            labelS.scale.set(maxDim*0.15, maxDim*0.075, 1);
+            scene.add(labelS);
+
+            const labelE = createTextSprite("東", "#000000");
+            labelE.position.set(centerGlobal.x + distStr, labelY, centerGlobal.z);
+            labelE.scale.set(maxDim*0.15, maxDim*0.075, 1);
+            scene.add(labelE);
+
+            const labelW = createTextSprite("西", "#000000");
+            labelW.position.set(centerGlobal.x - distStr, labelY, centerGlobal.z);
+            labelW.scale.set(maxDim*0.15, maxDim*0.075, 1);
+            scene.add(labelW);
+
+            const texLoader = new THREE.TextureLoader();
+            const buster = '?v=' + Date.now();
+            
+            texLoader.load('tyousakekka.png' + buster, (texture) => {
+                const planeGeo = new THREE.PlaneGeometry(size.x, size.z);
+                const planeMat = new THREE.MeshBasicMaterial({ 
+                    map: texture, 
+                    transparent: true, 
+                    opacity: 0.85, 
+                    side: THREE.DoubleSide,
+                    polygonOffset: true,
+                    polygonOffsetFactor: -1,
+                    polygonOffsetUnits: -1
+                });
+                topImagePlane = new THREE.Mesh(planeGeo, planeMat);
+                topImagePlane.rotation.x = -Math.PI / 2;
+                topImagePlane.position.set(centerGlobal.x, centerGlobal.y + (size.y / 2) + 0.01, centerGlobal.z);
+                scene.add(topImagePlane);
+            });
+
+            const initialTarget = centerGlobal.clone().add(new THREE.Vector3(0, -maxDimGlobal * 0.2, 0));
+            
+            perspCamera.position.set(initialTarget.x - maxDim, initialTarget.y + maxDim * 0.9, initialTarget.z + maxDim * 1.3);
+            perspCamera.lookAt(initialTarget);
+            controls.target.copy(initialTarget); 
+
+            const frustumSize = maxDim * 1.8; 
+            const aspect = window.innerWidth / window.innerHeight;
+            orthoCamera.left = frustumSize * aspect / -2;
+            orthoCamera.right = frustumSize * aspect / 2;
+            orthoCamera.top = frustumSize / 2;
+            orthoCamera.bottom = frustumSize / -2;
+            orthoCamera.updateProjectionMatrix();
+
+            dirLight.position.set(centerGlobal.x + maxDim, centerGlobal.y + maxDim, centerGlobal.z + maxDim);
+
+            models['Left_B1'].position.y = maxDim * 0.0001;
+            models['Right_B1'].position.y = maxDim * 0.0001;
+            models['Left_B2'].position.y = maxDim * 0.0002;
+            models['Right_B2'].position.y = maxDim * 0.0002;
+
+            document.getElementById('status').style.display = 'none';
+            updateVisibility();
+
+            const handleToggleChange = () => {
+                if (isTrueMode) {
+                    isTrueMode = false;
+                    document.getElementById('view-true-btn').innerText = '真の傾斜角を表示';
+                    document.getElementById('view-true-btn').classList.remove('active');
+                }
+                updateVisibility();
+            };
+
+            document.getElementById('toggle-b1').addEventListener('change', handleToggleChange);
+            document.getElementById('toggle-b2').addEventListener('change', handleToggleChange);
+            document.getElementById('toggle-g').addEventListener('change', handleToggleChange);
+            document.getElementById('toggle-w').addEventListener('change', handleToggleChange);
+
+            const leftBtn = document.getElementById('toggle-left-side');
+            leftBtn.addEventListener('click', () => {
+                if (isTrueMode) {
+                    isTrueMode = false;
+                    document.getElementById('view-true-btn').innerText = '真の傾斜角を表示';
+                    document.getElementById('view-true-btn').classList.remove('active');
+                }
+                leftSideVisible = !leftSideVisible;
+                if (leftSideVisible) {
+                    leftBtn.classList.add('active');
+                    leftBtn.innerText = '断層の西側 表示';
+                } else {
+                    leftBtn.classList.remove('active');
+                    leftBtn.innerText = '断層の西側 非表示';
+                }
+                updateVisibility();
+            });
+
+            const rightBtn = document.getElementById('toggle-right-side');
+            rightBtn.addEventListener('click', () => {
+                if (isTrueMode) {
+                    isTrueMode = false;
+                    document.getElementById('view-true-btn').innerText = '真の傾斜角を表示';
+                    document.getElementById('view-true-btn').classList.remove('active');
+                }
+                rightSideVisible = !rightSideVisible;
+                if (rightSideVisible) {
+                    rightBtn.classList.add('active');
+                    rightBtn.innerText = '断層の東側 表示';
+                } else {
+                    rightBtn.classList.remove('active');
+                    rightBtn.innerText = '断層の東側 非表示';
+                }
+                updateVisibility();
+            });
+
+            const imageBtn = document.getElementById('toggle-image-btn');
+            imageBtn.addEventListener('click', () => {
+                imageVisible = !imageVisible;
+                updateVisibility(); 
+                if (imageVisible) {
+                    imageBtn.classList.add('active');
+                    imageBtn.innerText = '🗺️ 角度の説明 表示';
+                } else {
+                    imageBtn.classList.remove('active');
+                    imageBtn.innerText = '🗺️ 角度の説明 非表示';
+                }
+            });
+
+        }).catch((err) => {
+            console.error(err);
+            document.getElementById('status').innerText = 'エラー（ファイル名を確認）';
+        });
+
+        function setOrthographicView(cameraPos, targetPos, clickedBtn) {
+            activeCamera = orthoCamera;
+            controls.object = orthoCamera;
+            
+            const frustumSize = maxDimGlobal * 1.8; 
+            const aspect = window.innerWidth / window.innerHeight;
+            orthoCamera.left = frustumSize * aspect / -2;
+            orthoCamera.right = frustumSize * aspect / 2;
+            orthoCamera.top = frustumSize / 2;
+            orthoCamera.bottom = frustumSize / -2;
+            orthoCamera.updateProjectionMatrix();
+            
+            orthoCamera.position.copy(cameraPos);
+            controls.target.copy(targetPos);
+            orthoCamera.lookAt(targetPos);
+            controls.update();
+
+            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            if (clickedBtn) clickedBtn.classList.add('active');
+        }
+
+        const yOffset = () => new THREE.Vector3(0, -maxDimGlobal * 0.2, 0);
+
+        const handleStandardViewClick = (e, camPosFunc) => {
+            if (isTrueMode) {
+                isTrueMode = false;
+                document.getElementById('view-true-btn').innerText = '真の傾斜角を表示';
+                updateVisibility();
+            }
+            const d = maxDimGlobal * 1.5;
+            const currentTarget = centerGlobal.clone().add(yOffset());
+            const camPos = camPosFunc(currentTarget, d);
+            setOrthographicView(camPos, currentTarget, e.target);
+        };
+
+        document.getElementById('view-top-btn').addEventListener('click', (e) => {
+            handleStandardViewClick(e, (target, d) => new THREE.Vector3(target.x, target.y + d, target.z));
+        });
+
+        document.getElementById('view-north-btn').addEventListener('click', (e) => {
+            handleStandardViewClick(e, (target, d) => new THREE.Vector3(target.x, target.y, target.z - d));
+        });
+
+        document.getElementById('view-south-btn').addEventListener('click', (e) => {
+            handleStandardViewClick(e, (target, d) => new THREE.Vector3(target.x, target.y, target.z + d));
+        });
+
+        document.getElementById('view-east-btn').addEventListener('click', (e) => {
+            handleStandardViewClick(e, (target, d) => new THREE.Vector3(target.x + d, target.y, target.z));
+        });
+
+        document.getElementById('view-west-btn').addEventListener('click', (e) => {
+            handleStandardViewClick(e, (target, d) => new THREE.Vector3(target.x - d, target.y, target.z));
+        });
+
+        document.getElementById('view-fault-btn').addEventListener('click', (e) => {
+            if ((!leftSideVisible && rightSideVisible) || (leftSideVisible && !rightSideVisible)) {
+                if (isTrueMode) {
+                    isTrueMode = false;
+                    document.getElementById('view-true-btn').innerText = '真の傾斜角を表示';
+                    updateVisibility();
+                }
+
+                const d = maxDimGlobal * 1.5;
+                const rad20 = THREE.MathUtils.degToRad(20);
+                const currentTarget = faultCenter.clone().add(yOffset());
+                
+                sideImages.forEach(mesh => mesh.visible = false);
+
+                if (!leftSideVisible && rightSideVisible) {
+                    const camPos = new THREE.Vector3(
+                        currentTarget.x - d * Math.cos(rad20),
+                        currentTarget.y,
+                        currentTarget.z - d * Math.sin(rad20)
+                    );
+                    setOrthographicView(camPos, currentTarget, e.target);
+                } else if (leftSideVisible && !rightSideVisible) {
+                    const camPos = new THREE.Vector3(
+                        currentTarget.x + d * Math.cos(rad20),
+                        currentTarget.y,
+                        currentTarget.z + d * Math.sin(rad20)
+                    );
+                    setOrthographicView(camPos, currentTarget, e.target);
+                }
+            }
+        });
+
+        document.getElementById('view-true-btn').addEventListener('click', (e) => {
+            isTrueMode = !isTrueMode; 
+            updateVisibility();
+            
+            if (isTrueMode) {
+                e.target.innerText = '真の傾斜角を非表示';
+                const d = maxDimGlobal * 1.5;
+                
+                const trueBox = new THREE.Box3().setFromObject(trueGazouModel);
+                const trueCenter = trueBox.getCenter(new THREE.Vector3());
+                const currentTarget = trueCenter.clone().add(yOffset());
+
+                const rotY = -Math.PI / 2 - THREE.MathUtils.degToRad(30);
+                const normal = new THREE.Vector3(Math.sin(rotY), 0, Math.cos(rotY));
+                const camPos = currentTarget.clone().add(normal.multiplyScalar(d));
+                
+                setOrthographicView(camPos, currentTarget, e.target);
+            } else {
+                e.target.innerText = '真の傾斜角を表示';
+                e.target.classList.remove('active');
+                
+                activeCamera = perspCamera;
+                controls.object = perspCamera;
+                
+                document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                
+                const d = (maxDimGlobal * 1.5 / 2) / Math.tan(THREE.MathUtils.degToRad(perspCamera.fov / 2));
+                const dir = new THREE.Vector3().subVectors(orthoCamera.position, controls.target).normalize();
+                
+                perspCamera.position.copy(controls.target).add(dir.multiplyScalar(d));
+                perspCamera.lookAt(controls.target);
+                controls.update();
+            }
+        });
+
+        controls.addEventListener('start', () => {
+            if (activeCamera === orthoCamera) {
+                activeCamera = perspCamera;
+                controls.object = perspCamera;
+                
+                document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                
+                if (!isTrueMode) {
+                    sideImages.forEach(mesh => mesh.visible = imageVisible);
+                }
+                
+                const d = (maxDimGlobal * 1.5 / 2) / Math.tan(THREE.MathUtils.degToRad(perspCamera.fov / 2));
+                const dir = new THREE.Vector3().subVectors(orthoCamera.position, controls.target).normalize();
+                
+                perspCamera.position.copy(controls.target).add(dir.multiplyScalar(d));
+                perspCamera.lookAt(controls.target);
+                controls.update();
+            }
+        });
+
+        const camDir = new THREE.Vector3();
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, activeCamera);
+
+            activeCamera.getWorldDirection(camDir);
+            const compassAngle = Math.atan2(-camDir.x, -camDir.z); 
+            document.getElementById('compass-disc').style.transform = `rotate(${compassAngle}rad)`;
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            const aspect = window.innerWidth / window.innerHeight;
+            
+            perspCamera.aspect = aspect;
+            perspCamera.updateProjectionMatrix();
+
+            const currentFrustum = maxDimGlobal * 1.8;
+            orthoCamera.left = currentFrustum * aspect / -2;
+            orthoCamera.right = currentFrustum * aspect / 2;
+            orthoCamera.top = currentFrustum / 2;
+            orthoCamera.bottom = currentFrustum / -2;
+            orthoCamera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
