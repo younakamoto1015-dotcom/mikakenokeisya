@@ -9,13 +9,13 @@
         
         #ui-panel {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(15, 15, 15, 0.9); padding: 15px 25px;
+            background: rgba(15, 15, 15, 0.9); padding: 15px 20px;
             border-radius: 12px; color: #fff; box-shadow: 0 8px 16px rgba(0,0,0,0.5);
             z-index: 100; width: 98%; max-width: 1000px; 
-            display: flex; flex-direction: column; gap: 15px;
+            display: flex; flex-direction: column; gap: 12px;
             border: 1px solid #333;
         }
-        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 8px; }
         .panel-header h3 { margin: 0; font-size: 18px; color: #fff; }
         #status { font-size: 12px; color: #00ffcc; font-weight: normal; transition: 0.3s; }
         
@@ -23,10 +23,34 @@
         .toggles label { font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: bold; }
         .toggles input[type="checkbox"] { cursor: pointer; accent-color: #00ffcc; }
         
-        .controls-row { display: flex; flex-direction: column; gap: 10px; }
+        .controls-row { display: flex; flex-direction: column; gap: 8px; }
 
-        .btn-container { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-        .action-btn { flex: 1; min-width: 135px; padding: 10px 8px; background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; font-size: 13px; white-space: nowrap; text-align: center; }
+        /* ボタンが絶対に折り返さない（段落ちしない）ように強制 */
+        .btn-container { 
+            display: flex; 
+            gap: 6px; 
+            justify-content: center; 
+            flex-wrap: nowrap; 
+            overflow-x: auto; 
+            padding-bottom: 2px;
+        }
+        
+        /* min-widthの制限を外し、自動で均等に縮むように変更 */
+        .action-btn { 
+            flex: 1 1 auto; 
+            padding: 10px 4px; 
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: all 0.2s; 
+            font-size: 12px; 
+            white-space: nowrap; 
+            text-align: center; 
+        }
+        
         .action-btn:hover { background: #555; border-color: #888; }
         .action-btn.active { background: #00ffcc; color: #000; border-color: #00ffcc; }
 
@@ -37,6 +61,10 @@
         #view-true-btn { background: #205020; border-color: #448844; transition: 0.3s; }
         #view-true-btn:hover { background: #307030; border-color: #55aa55; }
         #view-true-btn.active { background: #55ff55; color: #000; border-color: #55ff55; }
+
+        /* スクロールバーを見えなくする（スマホ等の横スワイプ用） */
+        .btn-container::-webkit-scrollbar { display: none; }
+        .btn-container { -ms-overflow-style: none; scrollbar-width: none; }
 
         #compass-container {
             position: absolute; top: 20px; right: 20px;
@@ -102,6 +130,8 @@
                 <button id="toggle-left-side" class="action-btn active">断層の西側 表示</button>
                 <button id="toggle-right-side" class="action-btn active">断層の東側 表示</button>
                 <button id="toggle-image-btn" class="action-btn active">🗺️ 角度の説明 表示</button>
+                <button id="view-true-btn" class="action-btn view-btn">真の傾斜角を表示</button>
+                <button id="view-fault-btn" class="action-btn view-btn" style="display: none;">断層面を西側から見る</button>
             </div>
             <div class="btn-container">
                 <button id="view-top-btn" class="action-btn view-btn">真上から見る</button>
@@ -109,8 +139,6 @@
                 <button id="view-south-btn" class="action-btn view-btn">南側から見る</button>
                 <button id="view-east-btn" class="action-btn view-btn">東側から見る</button>
                 <button id="view-west-btn" class="action-btn view-btn">西側から見る</button>
-                <button id="view-fault-btn" class="action-btn view-btn" style="display: none;">断層面を西側から見る</button>
-                <button id="view-true-btn" class="action-btn view-btn">真の傾斜角を表示</button>
             </div>
         </div>
     </div>
@@ -160,8 +188,8 @@
         controls.enableDamping = true;
         controls.zoomSpeed = 3.0; 
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2)); 
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7); 
         scene.add(dirLight);
 
         let maxDimGlobal = 100;
@@ -175,6 +203,10 @@
 
         let trueModel = null;
         let trueGazouModel = null;
+        
+        let eastDansouGazou = null;
+        let westDansouGazou = null;
+        
         let skeletonMesh = null; 
 
         let leftSideVisible = true;
@@ -201,6 +233,8 @@
             if (isTrueMode) {
                 Object.values(models).forEach(m => m.visible = false);
                 sideImages.forEach(mesh => mesh.visible = false);
+                if (eastDansouGazou) eastDansouGazou.visible = false;
+                if (westDansouGazou) westDansouGazou.visible = false;
                 if (skeletonMesh) skeletonMesh.visible = false;
                 
                 if (trueModel) trueModel.visible = true;
@@ -229,6 +263,13 @@
                 
                 sideImages.forEach(mesh => mesh.visible = imageVisible);
                 if (topImagePlane) topImagePlane.visible = imageVisible;
+                
+                if (eastDansouGazou) {
+                    eastDansouGazou.visible = leftSideVisible && !rightSideVisible && imageVisible;
+                }
+                if (westDansouGazou) {
+                    westDansouGazou.visible = !leftSideVisible && rightSideVisible && imageVisible;
+                }
 
                 updateFaultBtnState();
             }
@@ -257,6 +298,8 @@
                     originalMeshes.forEach((child) => {
                         child.frustumCulled = false; 
                         let originalColor = child.material.color ? child.material.color.clone() : new THREE.Color(0xffffff);
+                        
+                        originalColor.multiplyScalar(1.3);
 
                         child.material = new THREE.MeshPhongMaterial({
                             color: originalColor, 
@@ -300,29 +343,60 @@
 
         const loadGazouModel = (url, isTrueGazou = false) => {
             return new Promise((resolve, reject) => {
-                const buster = '?v=' + Date.now();
-                loader.load(url + buster, (gltf) => {
+                loader.load(url, (gltf) => {
                     const model = gltf.scene;
                     model.traverse((child) => {
                         if (child.isMesh) {
                             child.material.transparent = true;
-                            child.material.blending = THREE.MultiplyBlending;
                             child.material.depthWrite = false; 
                             child.material.side = THREE.DoubleSide; 
+
+                            child.material.polygonOffset = true;
+                            child.material.polygonOffsetFactor = -5;
+                            child.material.polygonOffsetUnits = -5;
+
+                            if (url.includes('dansougazou')) {
+                                child.material.blending = THREE.NormalBlending;
+                                child.material.opacity = 0.6; 
+                            } else {
+                                child.material.blending = THREE.MultiplyBlending;
+                                child.material.opacity = 1.0; 
+                            }
+
+                            if (url === 'westgazou.glb') {
+                                child.geometry.computeBoundingBox();
+                                const bbox = child.geometry.boundingBox;
+                                const width = bbox.max.z - bbox.min.z;
+                                const height = bbox.max.y - bbox.min.y;
+                                
+                                const center = new THREE.Vector3();
+                                bbox.getCenter(center);
+                                
+                                const newGeo = new THREE.PlaneGeometry(width, height);
+                                
+                                newGeo.scale(1, -1, 1);
+                                newGeo.rotateY(-Math.PI / 2);
+                                newGeo.translate(center.x, center.y, center.z);
+                                
+                                child.geometry.dispose();
+                                child.geometry = newGeo;
+                            }
                         }
                     });
                     model.scale.set(10, 10, 10);
-                    
-                    // 回転のハックは完全に削除しました。Blenderの情報を100%信用します。
-
                     model.visible = false;
                     scene.add(model);
                     
                     if (isTrueGazou) {
                         trueGazouModel = model;
+                    } else if (url === 'eastdansougazou.glb') {
+                        eastDansouGazou = model;
+                    } else if (url === 'westdansougazou.glb') {
+                        westDansouGazou = model;
                     } else {
                         sideImages.push(model);
                     }
+                    
                     resolve();
                 }, undefined, reject);
             });
@@ -357,7 +431,9 @@
             loadGazouModel('southgazou.glb'),
             loadGazouModel('eastgazou.glb'),
             loadGazouModel('westgazou.glb'),
-            loadGazouModel('turegazou.glb', true)
+            loadGazouModel('turegazou.glb', true),
+            loadGazouModel('eastdansougazou.glb'),
+            loadGazouModel('westdansougazou.glb')
         ]).then(() => {
             const box = new THREE.Box3();
             Object.values(models).forEach(model => box.expandByObject(model));
@@ -403,9 +479,8 @@
             scene.add(labelW);
 
             const texLoader = new THREE.TextureLoader();
-            const buster = '?v=' + Date.now();
             
-            texLoader.load('tyousakekka.png' + buster, (texture) => {
+            texLoader.load('tyousakekka.png', (texture) => {
                 const planeGeo = new THREE.PlaneGeometry(size.x, size.z);
                 const planeMat = new THREE.MeshBasicMaterial({ 
                     map: texture, 
